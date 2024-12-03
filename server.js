@@ -2,6 +2,9 @@ const WebSocket = require("ws");
 const express = require("express");
 const bodyParser = require("body-parser");
 
+const https = require("https");
+const fs = require("fs");
+
 const app = express();
 app.use(bodyParser.json());
 
@@ -21,6 +24,8 @@ wss.on("connection", (ws) => {
 app.post("/", (req, res) => {
   const message = req.body;
 
+  console.log(message)
+
   // ส่งข้อความไปยัง WebSocket Clients
   clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -31,9 +36,16 @@ app.post("/", (req, res) => {
   res.status(200).send({ status: "Message sent to WebSocket clients" });
 });
 
+const options = {
+  key: fs.readFileSync("/etc/letsencrypt/live/evxcars.com/privkey.pem"),
+  cert: fs.readFileSync("/etc/letsencrypt/live/evxcars.com/fullchain.pem"),
+};
+
+const server = https.createServer(options, app);
+
 // เปิด HTTP Server สำหรับ WebSocket
-const server = app.listen(8080, () => {
-  console.log("WebSocket server running on http://localhost:8080");
+server.listen(8080, () => {
+  console.log("WebSocket server running on https://your-domain.com:8080");
 });
 
 server.on("upgrade", (request, socket, head) => {
