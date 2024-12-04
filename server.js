@@ -32,6 +32,10 @@ wss.on("connection", (ws) => {
     // เมื่อ Client ปิดการเชื่อมต่อ
     clients = clients.filter((client) => client !== ws); // ลบ Client ออกจากรายการ
   });
+
+  ws.on("error", (err) => {
+    console.error("WebSocket Error:", err);
+  });
 });
 
 // -----------------------------------------------------------------------------
