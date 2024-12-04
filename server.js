@@ -1,55 +1,87 @@
-const WebSocket = require("ws");
-const express = require("express");
-const bodyParser = require("body-parser");
+// โหลดโมดูลที่จำเป็น
+const WebSocket = require("ws"); // ใช้สำหรับสร้าง WebSocket Server
+const express = require("express"); // ใช้สำหรับสร้าง HTTP Server
+const bodyParser = require("body-parser"); // ใช้สำหรับจัดการข้อมูล JSON
+const https = require("https"); // ใช้สำหรับสร้าง HTTPS Server
+const fs = require("fs"); // ใช้สำหรับอ่านไฟล์ระบบ
+require("dotenv").config(); // โหลด Environment Variables
 
-const https = require("https");
-const fs = require("fs");
-
+// สร้างแอปพลิเคชัน Express
 const app = express();
-app.use(bodyParser.json());
+app.use(bodyParser.json()); // เปิดใช้งาน Body Parser เพื่อแปลง JSON request
 
+// กำหนดค่าจาก Environment Variables
+const env = process.env.NODE_ENV || "development"; // ตรวจสอบ Environment
+const config = require(`./config/${env}`); // โหลดไฟล์ Config ตาม Environment
+
+// ตรวจสอบว่ากำลังรันใน Production หรือ Development
+const isProduction = config.NODE_ENV === "production";
+
+// ตั้งค่า WebSocket Server
 const wss = new WebSocket.Server({ noServer: true });
-let clients = [];
+let clients = []; // เก็บรายการ WebSocket Clients ที่เชื่อมต่ออยู่
 
-// WebSocket Server
+// -----------------------------------------------------------------------------
+// การจัดการ WebSocket Server
+// -----------------------------------------------------------------------------
 wss.on("connection", (ws) => {
-  clients.push(ws);
+  // เมื่อมี Client เชื่อมต่อ
+  clients.push(ws); // เพิ่ม Client ลงในรายการ
 
   ws.on("close", () => {
-    clients = clients.filter((client) => client !== ws);
+    // เมื่อ Client ปิดการเชื่อมต่อ
+    clients = clients.filter((client) => client !== ws); // ลบ Client ออกจากรายการ
   });
 });
 
-// รับข้อความจาก Webhook
+// -----------------------------------------------------------------------------
+// การจัดการ Webhook (รับข้อความจาก API และส่งไปยัง WebSocket Clients)
+// -----------------------------------------------------------------------------
 app.post("/", (req, res) => {
-  const message = req.body;
-
-  console.log(message)
+  const message = req.body; // ข้อความที่ส่งมาจาก Webhook
+  console.log("ข้อความที่ได้รับจาก Webhook:", message);
 
   // ส่งข้อความไปยัง WebSocket Clients
   clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message));
+      client.send(JSON.stringify(message)); // ส่งข้อความในรูปแบบ JSON
     }
   });
 
-  res.status(200).send({ status: "Message sent to WebSocket clients" });
+  res.status(200).send({ status: "Message sent to WebSocket clients" }); // ตอบกลับ HTTP 200
 });
 
-const options = {
-  key: fs.readFileSync("/etc/letsencrypt/live/evxcars.com/privkey.pem"),
-  cert: fs.readFileSync("/etc/letsencrypt/live/evxcars.com/fullchain.pem"),
-};
+// -----------------------------------------------------------------------------
+// การตั้งค่า HTTPS Server
+// -----------------------------------------------------------------------------
+const options = isProduction
+  ? {
+      key: fs.readFileSync(config.SSL_KEY), // อ่านไฟล์ Private Key
+      cert: fs.readFileSync(config.SSL_CERT), // อ่านไฟล์ Certificate
+    }
+  : {};
 
-const server = https.createServer(options, app);
+// สร้าง HTTP หรือ HTTPS Server ขึ้นอยู่กับ Environment
+const server = isProduction
+  ? https.createServer(options, app)
+  : app;
 
-// เปิด HTTP Server สำหรับ WebSocket
-server.listen(8080, () => {
-  console.log("WebSocket server running on https://your-domain.com:8080");
+// -----------------------------------------------------------------------------
+// การเปิดใช้งาน Server
+// -----------------------------------------------------------------------------
+server.listen(config.PORT, () => {
+  console.log(
+    `WebSocket server running on ${
+      isProduction ? "https" : "http"
+    }://${config.DOMAIN}:${config.PORT}`
+  );
 });
 
+// -----------------------------------------------------------------------------
+// การจัดการ Upgrade Request สำหรับ WebSocket
+// -----------------------------------------------------------------------------
 server.on("upgrade", (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit("connection", ws, request);
+    wss.emit("connection", ws, request); // เรียก Event 'connection' เมื่อมีการอัปเกรดเป็น WebSocket
   });
 });
