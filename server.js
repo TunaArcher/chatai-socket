@@ -3,6 +3,7 @@ const WebSocket = require("ws"); // ใช้สำหรับสร้าง W
 const express = require("express"); // ใช้สำหรับสร้าง HTTP Server
 const bodyParser = require("body-parser"); // ใช้สำหรับจัดการข้อมูล JSON
 const https = require("https"); // ใช้สำหรับสร้าง HTTPS Server
+const http = require("http"); // ใช้สำหรับสร้าง HTTP Server
 const fs = require("fs"); // ใช้สำหรับอ่านไฟล์ระบบ
 require("dotenv").config(); // โหลด Environment Variables
 
@@ -56,19 +57,18 @@ app.post("/", (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// การตั้งค่า HTTPS Server
+// การตั้งค่า HTTPS/HTTP Server
 // -----------------------------------------------------------------------------
-const options = isProduction
-  ? {
-      key: fs.readFileSync(config.SSL_KEY), // อ่านไฟล์ Private Key
-      cert: fs.readFileSync(config.SSL_CERT), // อ่านไฟล์ Certificate
-    }
-  : {};
-
-// สร้าง HTTP หรือ HTTPS Server ขึ้นอยู่กับ Environment
-const server = isProduction
-  ? https.createServer(options, app)
-  : app;
+let server;
+if (isProduction) {
+  const options = {
+    key: fs.readFileSync(config.SSL_KEY), // อ่านไฟล์ Private Key
+    cert: fs.readFileSync(config.SSL_CERT), // อ่านไฟล์ Certificate
+  };
+  server = https.createServer(options, app); // ใช้ HTTPS ใน Production
+} else {
+  server = http.createServer(app); // ใช้ HTTP ใน Development
+}
 
 // -----------------------------------------------------------------------------
 // การเปิดใช้งาน Server
@@ -85,6 +85,7 @@ server.listen(config.PORT, () => {
 // การจัดการ Upgrade Request สำหรับ WebSocket
 // -----------------------------------------------------------------------------
 server.on("upgrade", (request, socket, head) => {
+  console.log("Upgrade request received:", request.url);
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit("connection", ws, request); // เรียก Event 'connection' เมื่อมีการอัปเกรดเป็น WebSocket
   });
